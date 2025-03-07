@@ -1,0 +1,7 @@
+fastapi
+supabase
+python-jose[cryptography]
+passlib
+python-multipart
+uvicorn
+python-dotenv
