@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from app.services.supabase_client import get_supabase
-from app.utils.security import get_password_hash, verify_password, create_access_token
+from app.utils.security import get_password_hash, verify_password, create_access_token, decode_token
 from app.models.user import User, Token
-from datetime import timedelta
+from datetime import datetime, timedelta
 import os
 from app.dependencies import get_current_user
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
 router = APIRouter()
 
@@ -39,9 +41,31 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/logout")
-async def logout(current_user: dict = Depends(get_current_user)):
-    # Invalidate token logic (if needed)
-    return {"message": "Logged out successfully"}
+async def logout(token: str = Depends(oauth2_scheme)):
+    supabase = get_supabase()
+    
+    # Decode the token to get its expiration time
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+    
+    expires_at = datetime.fromtimestamp(payload["exp"])
+    
+    # Add the token to the blacklist
+    try:
+        supabase.table("blacklisted_tokens").insert({
+            "token": token,
+            "expires_at": expires_at.isoformat()
+        }).execute()
+        return {"message": "Logged out successfully"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
 
 @router.get("/me")
 async def read_users_me(current_user: dict = Depends(get_current_user)):

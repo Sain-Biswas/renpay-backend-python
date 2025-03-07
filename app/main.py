@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routes import auth, user
+from app.routes import auth
 from dotenv import load_dotenv
 
 # Load environment variables

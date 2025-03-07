@@ -5,3 +5,4 @@ passlib
 python-multipart
 uvicorn
 python-dotenv
+bcrypt
