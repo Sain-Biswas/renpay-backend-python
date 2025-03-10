@@ -4,6 +4,7 @@ from app.models.invoice import (
     Invoice, InvoiceCreate, InvoiceUpdate, InvoiceStatus,
     InvoiceItem, InvoiceItemCreate, InvoiceItemUpdate
 )
+from app.models.transaction import TransactionType
 from app.dependencies import get_current_user
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -62,10 +63,12 @@ async def get_invoices(
 @router.post("/", response_model=Invoice, status_code=status.HTTP_201_CREATED)
 async def create_invoice(
     invoice_data: InvoiceCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    create_transaction: bool = Query(False, description="Whether to create a transaction for this invoice")
 ):
     """
     Create a new invoice with GST compliance and customizable templates.
+    Optionally create a transaction for this invoice.
     """
     supabase = get_supabase()
     
@@ -120,6 +123,43 @@ async def create_invoice(
             }
             supabase.table("invoice_items").insert(item_dict).execute()
         
+        # Create a transaction if requested
+        if create_transaction and invoice_data.status == InvoiceStatus.PAID:
+            # Find default account or create one
+            accounts = supabase.table("accounts").select("*").eq("user_id", current_user["id"]).execute()
+            
+            account_id = None
+            if not accounts.data or len(accounts.data) == 0:
+                # Create a default account
+                default_account = {
+                    "name": "Default Account",
+                    "balance": 0.0,
+                    "user_id": current_user["id"]
+                }
+                account_result = supabase.table("accounts").insert(default_account).execute()
+                account_id = account_result.data[0]["id"]
+            else:
+                account_id = accounts.data[0]["id"]
+            
+            # Create transaction
+            transaction_data = {
+                "amount": total_amount,
+                "description": f"Payment for invoice {invoice_data.invoice_number}",
+                "transaction_type": TransactionType.SALE,
+                "category": "Invoice Payment",
+                "date": invoice_dict["issue_date"],
+                "user_id": current_user["id"],
+                "account_id": account_id
+            }
+            
+            transaction_result = supabase.table("transactions").insert(transaction_data).execute()
+            
+            # Update account balance
+            if transaction_result.data and len(transaction_result.data) > 0:
+                account = supabase.table("accounts").select("*").eq("id", account_id).execute().data[0]
+                new_balance = account["balance"] + total_amount
+                supabase.table("accounts").update({"balance": new_balance}).eq("id", account_id).execute()
+        
         # Fetch the complete invoice with items
         complete_invoice = supabase.table("invoices").select("*").eq("id", invoice_id).execute()
         items_result = supabase.table("invoice_items").select("*").eq("invoice_id", invoice_id).execute()
@@ -172,6 +212,8 @@ async def update_invoice(
     if not existing.data or len(existing.data) == 0:
         raise HTTPException(status_code=404, detail="Invoice not found")
     
+    existing_invoice = existing.data[0]
+    
     # Filter out None values
     update_data = {k: v for k, v in invoice_update.dict().items() if v is not None}
     
@@ -182,8 +224,114 @@ async def update_invoice(
         update_data["due_date"] = update_data["due_date"].isoformat()
     
     try:
+        # If status is changing to PAID, create a transaction
+        if "status" in update_data and update_data["status"] == InvoiceStatus.PAID and existing_invoice["status"] != InvoiceStatus.PAID:
+            # Find default account or create one
+            accounts = supabase.table("accounts").select("*").eq("user_id", current_user["id"]).execute()
+            
+            account_id = None
+            if not accounts.data or len(accounts.data) == 0:
+                # Create a default account
+                default_account = {
+                    "name": "Default Account",
+                    "balance": 0.0,
+                    "user_id": current_user["id"]
+                }
+                account_result = supabase.table("accounts").insert(default_account).execute()
+                account_id = account_result.data[0]["id"]
+            else:
+                account_id = accounts.data[0]["id"]
+            
+            # Create transaction
+            transaction_data = {
+                "amount": existing_invoice["total_amount"],
+                "description": f"Payment for invoice {existing_invoice['invoice_number']}",
+                "transaction_type": TransactionType.SALE,
+                "category": "Invoice Payment",
+                "date": datetime.now().isoformat(),
+                "user_id": current_user["id"],
+                "account_id": account_id
+            }
+            
+            transaction_result = supabase.table("transactions").insert(transaction_data).execute()
+            
+            # Update account balance
+            if transaction_result.data and len(transaction_result.data) > 0:
+                account = supabase.table("accounts").select("*").eq("id", account_id).execute().data[0]
+                new_balance = account["balance"] + existing_invoice["total_amount"]
+                supabase.table("accounts").update({"balance": new_balance}).eq("id", account_id).execute()
+        
         # Update the invoice
         result = supabase.table("invoices").update(update_data).eq("id", str(invoice_id)).execute()
+        
+        # Fetch the updated invoice with items
+        updated_invoice = result.data[0]
+        items_result = supabase.table("invoice_items").select("*").eq("invoice_id", str(invoice_id)).execute()
+        updated_invoice["items"] = items_result.data if items_result.data else []
+        
+        return updated_invoice
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/{invoice_id}/mark-as-paid", response_model=Invoice)
+async def mark_invoice_as_paid(
+    invoice_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Mark an invoice as paid and create a corresponding transaction.
+    """
+    supabase = get_supabase()
+    
+    # Check if invoice exists and belongs to the user
+    existing = supabase.table("invoices").select("*").eq("id", str(invoice_id)).eq("user_id", current_user["id"]).execute()
+    
+    if not existing.data or len(existing.data) == 0:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    existing_invoice = existing.data[0]
+    
+    if existing_invoice["status"] == InvoiceStatus.PAID:
+        raise HTTPException(status_code=400, detail="Invoice is already marked as paid")
+    
+    try:
+        # Find default account or create one
+        accounts = supabase.table("accounts").select("*").eq("user_id", current_user["id"]).execute()
+        
+        account_id = None
+        if not accounts.data or len(accounts.data) == 0:
+            # Create a default account
+            default_account = {
+                "name": "Default Account",
+                "balance": 0.0,
+                "user_id": current_user["id"]
+            }
+            account_result = supabase.table("accounts").insert(default_account).execute()
+            account_id = account_result.data[0]["id"]
+        else:
+            account_id = accounts.data[0]["id"]
+        
+        # Create transaction
+        transaction_data = {
+            "amount": existing_invoice["total_amount"],
+            "description": f"Payment for invoice {existing_invoice['invoice_number']}",
+            "transaction_type": TransactionType.SALE,
+            "category": "Invoice Payment",
+            "date": datetime.now().isoformat(),
+            "user_id": current_user["id"],
+            "account_id": account_id
+        }
+        
+        transaction_result = supabase.table("transactions").insert(transaction_data).execute()
+        
+        # Update account balance
+        if transaction_result.data and len(transaction_result.data) > 0:
+            account = supabase.table("accounts").select("*").eq("id", account_id).execute().data[0]
+            new_balance = account["balance"] + existing_invoice["total_amount"]
+            supabase.table("accounts").update({"balance": new_balance}).eq("id", account_id).execute()
+        
+        # Update the invoice status
+        result = supabase.table("invoices").update({"status": InvoiceStatus.PAID}).eq("id", str(invoice_id)).execute()
         
         # Fetch the updated invoice with items
         updated_invoice = result.data[0]
