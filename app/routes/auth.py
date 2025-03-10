@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from app.services.supabase_client import get_supabase
-from app.utils.security import get_password_hash, verify_password, create_access_token, decode_token
+from utils.security import get_password_hash, verify_password, create_access_token, decode_token
 from app.models.user import User, Token
 from datetime import datetime, timedelta
 import os

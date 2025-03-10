@@ -17,6 +17,13 @@ CREATE TABLE IF NOT EXISTS accounts (
     name TEXT NOT NULL,
     balance DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+CREATE TABLE IF NOT EXISTS inventory (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT,
+    stock_level INTEGER NOT NULL,
+    price NUMERIC(10, 2) NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -30,6 +37,11 @@ CREATE TABLE IF NOT EXISTS transactions (
     date TIMESTAMPTZ DEFAULT NOW(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    message TEXT NOT NULL,
+    status TEXT DEFAULT 'unread',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -50,6 +62,13 @@ CREATE TABLE IF NOT EXISTS invoices (
     notes TEXT,
     template TEXT DEFAULT 'default',
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+CREATE TABLE IF NOT EXISTS user_preferences (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    language TEXT DEFAULT 'en',
+    theme TEXT DEFAULT 'light',
+    alert_preferences JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -141,3 +160,15 @@ CREATE INDEX IF NOT EXISTS idx_tax_submissions_user_id ON tax_submissions(user_i
 
 -- Create an index on filing_id for tax_submissions
 CREATE INDEX IF NOT EXISTS idx_tax_submissions_filing_id ON tax_submissions(filing_id);
+
+
+CREATE TABLE IF NOT EXISTS sales_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    report_date DATE NOT NULL,
+    total_sales NUMERIC(10, 2) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
+
