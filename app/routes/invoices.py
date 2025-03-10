@@ -6,6 +6,7 @@ from app.models.invoice import (
 )
 from app.models.transaction import TransactionType
 from app.dependencies import get_current_user
+from app.routes.transactions import update_account_balance
 from typing import List, Optional
 from datetime import datetime, timedelta
 from uuid import UUID
@@ -156,9 +157,12 @@ async def create_invoice(
             
             # Update account balance
             if transaction_result.data and len(transaction_result.data) > 0:
-                account = supabase.table("accounts").select("*").eq("id", account_id).execute().data[0]
-                new_balance = account["balance"] + total_amount
-                supabase.table("accounts").update({"balance": new_balance}).eq("id", account_id).execute()
+                await update_account_balance(
+                    supabase,
+                    UUID(account_id),
+                    total_amount,
+                    TransactionType.SALE
+                )
         
         # Fetch the complete invoice with items
         complete_invoice = supabase.table("invoices").select("*").eq("id", invoice_id).execute()
@@ -257,9 +261,12 @@ async def update_invoice(
             
             # Update account balance
             if transaction_result.data and len(transaction_result.data) > 0:
-                account = supabase.table("accounts").select("*").eq("id", account_id).execute().data[0]
-                new_balance = account["balance"] + existing_invoice["total_amount"]
-                supabase.table("accounts").update({"balance": new_balance}).eq("id", account_id).execute()
+                await update_account_balance(
+                    supabase,
+                    UUID(account_id),
+                    existing_invoice["total_amount"],
+                    TransactionType.SALE
+                )
         
         # Update the invoice
         result = supabase.table("invoices").update(update_data).eq("id", str(invoice_id)).execute()
@@ -326,9 +333,12 @@ async def mark_invoice_as_paid(
         
         # Update account balance
         if transaction_result.data and len(transaction_result.data) > 0:
-            account = supabase.table("accounts").select("*").eq("id", account_id).execute().data[0]
-            new_balance = account["balance"] + existing_invoice["total_amount"]
-            supabase.table("accounts").update({"balance": new_balance}).eq("id", account_id).execute()
+            await update_account_balance(
+                supabase,
+                UUID(account_id),
+                existing_invoice["total_amount"],
+                TransactionType.SALE
+            )
         
         # Update the invoice status
         result = supabase.table("invoices").update({"status": InvoiceStatus.PAID}).eq("id", str(invoice_id)).execute()

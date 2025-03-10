@@ -28,10 +28,15 @@ async def update_account_balance(supabase, account_id: UUID, amount: float, tran
     
     # Calculate new balance based on transaction type
     if transaction_type == TransactionType.SALE:
+        # Sales increase the balance
         new_balance = current_balance + (amount if is_new else -amount)
     elif transaction_type == TransactionType.EXPENSE:
+        # Expenses decrease the balance
         new_balance = current_balance - (amount if is_new else -amount)
-    # For transfers, we assume they don't affect the overall balance
+    elif transaction_type == TransactionType.TRANSFER:
+        # For transfers, we need to handle both accounts separately
+        # This function only updates one account, so no special handling needed here
+        pass
     
     # Update account balance
     supabase.table("accounts").update({"balance": new_balance}).eq("id", str(account_id)).execute()

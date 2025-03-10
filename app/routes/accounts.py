@@ -3,6 +3,7 @@ from app.services.supabase_client import get_supabase
 from app.models.account import Account, AccountCreate, AccountUpdate
 from app.models.transaction import TransactionType, Transaction
 from app.dependencies import get_current_user
+from app.routes.transactions import update_account_balance
 from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 from uuid import UUID
@@ -154,12 +155,25 @@ async def delete_account(
             if not target_account.data or len(target_account.data) == 0:
                 raise HTTPException(status_code=404, detail="Target account not found")
             
+            # Get all transactions for the account being deleted
+            transactions = supabase.table("transactions").select("*").eq("account_id", str(account_id)).execute()
+            
             # Update all transactions to the new account
-            supabase.table("transactions").update({"account_id": str(transfer_to_account_id)}).eq("account_id", str(account_id)).execute()
+            if transactions.data:
+                supabase.table("transactions").update({"account_id": str(transfer_to_account_id)}).eq("account_id", str(account_id)).execute()
             
             # Transfer the balance to the target account
             target_balance = target_account.data[0]["balance"] + existing.data[0]["balance"]
             supabase.table("accounts").update({"balance": target_balance}).eq("id", str(transfer_to_account_id)).execute()
+        else:
+            # If not transferring, check if there are any transactions
+            transactions = supabase.table("transactions").select("*").eq("account_id", str(account_id)).execute()
+            
+            if transactions.data and len(transactions.data) > 0:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="Cannot delete account with transactions. Transfer them to another account first."
+                )
         
         # Delete the account
         supabase.table("accounts").delete().eq("id", str(account_id)).execute()
