@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routes import auth, transactions, accounts, invoices
+from app.routes import auth, transactions, accounts, invoices, tax
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -13,6 +13,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
 app.include_router(accounts.router, prefix="/api/accounts", tags=["accounts"])
 app.include_router(invoices.router, prefix="/api/invoices", tags=["invoices"])
+app.include_router(tax.router, prefix="/api/tax", tags=["tax"])
 
 # Root endpoint
 @app.get("/")

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
 from app.services.supabase_client import get_supabase
 from app.models.invoice import (
     Invoice, InvoiceCreate, InvoiceUpdate, InvoiceStatus,
@@ -8,7 +8,7 @@ from app.models.transaction import TransactionType
 from app.dependencies import get_current_user
 from app.routes.transactions import update_account_balance
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, calendar
 from uuid import UUID
 import random
 import string
@@ -21,6 +21,21 @@ def generate_invoice_number():
     year_month = now.strftime("%Y-%m")
     random_suffix = ''.join(random.choices(string.digits, k=4))
     return f"INV-{year_month}-{random_suffix}"
+
+def calculate_invoice_taxes(subtotal: float, tax_rate: float = 18.0):
+    """
+    Calculate tax amount and total for an invoice.
+    
+    Args:
+        subtotal: The subtotal amount before tax
+        tax_rate: The tax rate (default: 18.0 for GST)
+        
+    Returns:
+        tuple: (tax_amount, total_amount)
+    """
+    tax_amount = round(subtotal * tax_rate / 100, 2)
+    total_amount = subtotal + tax_amount
+    return tax_amount, total_amount
 
 @router.get("/", response_model=List[Invoice])
 async def get_invoices(
@@ -82,8 +97,7 @@ async def create_invoice(
     subtotal = sum(item.quantity * item.unit_price for item in items)
     
     # Calculate tax amount and total
-    tax_amount = round(subtotal * invoice_data.tax_rate / 100, 2)
-    total_amount = subtotal + tax_amount
+    tax_amount, total_amount = calculate_invoice_taxes(subtotal, invoice_data.tax_rate)
     
     # Prepare invoice data for insertion
     invoice_dict = {
@@ -227,6 +241,12 @@ async def update_invoice(
     if "due_date" in update_data and update_data["due_date"]:
         update_data["due_date"] = update_data["due_date"].isoformat()
     
+    # If tax_rate is updated, recalculate tax_amount and total_amount
+    if "tax_rate" in update_data:
+        tax_amount, total_amount = calculate_invoice_taxes(existing_invoice["subtotal"], update_data["tax_rate"])
+        update_data["tax_amount"] = tax_amount
+        update_data["total_amount"] = total_amount
+    
     try:
         # If status is changing to PAID, create a transaction
         if "status" in update_data and update_data["status"] == InvoiceStatus.PAID and existing_invoice["status"] != InvoiceStatus.PAID:
@@ -283,10 +303,12 @@ async def update_invoice(
 @router.post("/{invoice_id}/mark-as-paid", response_model=Invoice)
 async def mark_invoice_as_paid(
     invoice_id: UUID,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    create_tax_filing: bool = Query(False, description="Whether to include this invoice in a tax filing")
 ):
     """
     Mark an invoice as paid and create a corresponding transaction.
+    Optionally include this invoice in a tax filing.
     """
     supabase = get_supabase()
     
@@ -302,7 +324,7 @@ async def mark_invoice_as_paid(
         raise HTTPException(status_code=400, detail="Invoice is already marked as paid")
     
     try:
-        # Find default account or create one
+        # Find or create a default account
         accounts = supabase.table("accounts").select("*").eq("user_id", current_user["id"]).execute()
         
         account_id = None
@@ -339,9 +361,67 @@ async def mark_invoice_as_paid(
                 existing_invoice["total_amount"],
                 TransactionType.SALE
             )
+            
+            # Add transaction ID to invoice notes for reference
+            notes = existing_invoice["notes"] or ""
+            updated_notes = f"{notes}\nTransaction ID: {transaction_result.data[0]['id']}"
+            
+            # Update the invoice status and notes
+            result = supabase.table("invoices").update({
+                "status": InvoiceStatus.PAID,
+                "notes": updated_notes
+            }).eq("id", str(invoice_id)).execute()
+        else:
+            # Just update the invoice status
+            result = supabase.table("invoices").update({
+                "status": InvoiceStatus.PAID
+            }).eq("id", str(invoice_id)).execute()
         
-        # Update the invoice status
-        result = supabase.table("invoices").update({"status": InvoiceStatus.PAID}).eq("id", str(invoice_id)).execute()
+        # If requested, include this invoice in a tax filing
+        if create_tax_filing:
+            # Get the current quarter dates
+            today = date.today()
+            current_quarter = (today.month - 1) // 3 + 1
+            start_month = (current_quarter - 1) * 3 + 1
+            end_month = current_quarter * 3
+            start_date = date(today.year, start_month, 1)
+            end_date = date(today.year, end_month, calendar.monthrange(today.year, end_month)[1])
+            
+            # Check if a filing already exists for this period
+            existing_filing = supabase.table("tax_filings").select("*").eq("user_id", current_user["id"]).eq("period_start", start_date.isoformat()).eq("period_end", end_date.isoformat()).eq("tax_type", "gst").execute()
+            
+            if existing_filing.data and len(existing_filing.data) > 0:
+                # Update existing filing
+                filing = existing_filing.data[0]
+                
+                # Update the filing with this invoice's tax amount
+                new_total_sales = filing["total_sales"] + existing_invoice["subtotal"]
+                new_tax_collected = filing["total_tax_collected"] + existing_invoice["tax_amount"]
+                new_net_liability = filing["net_tax_liability"] + existing_invoice["tax_amount"]
+                
+                supabase.table("tax_filings").update({
+                    "total_sales": new_total_sales,
+                    "total_tax_collected": new_tax_collected,
+                    "net_tax_liability": new_net_liability,
+                    "transaction_count": filing["transaction_count"] + 1
+                }).eq("id", filing["id"]).execute()
+            else:
+                # Create a new filing
+                filing_data = {
+                    "period_start": start_date.isoformat(),
+                    "period_end": end_date.isoformat(),
+                    "tax_type": "gst",
+                    "period_type": "quarterly",
+                    "total_sales": existing_invoice["subtotal"],
+                    "total_tax_collected": existing_invoice["tax_amount"],
+                    "total_tax_paid": 0.0,
+                    "net_tax_liability": existing_invoice["tax_amount"],
+                    "transaction_count": 1,
+                    "status": "draft",
+                    "user_id": current_user["id"]
+                }
+                
+                supabase.table("tax_filings").insert(filing_data).execute()
         
         # Fetch the updated invoice with items
         updated_invoice = result.data[0]
@@ -372,5 +452,58 @@ async def delete_invoice(
         # Delete the invoice (cascade will delete related items)
         supabase.table("invoices").delete().eq("id", str(invoice_id)).execute()
         return None
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/{invoice_id}/recalculate-taxes", response_model=Invoice)
+async def recalculate_invoice_taxes(
+    invoice_id: UUID,
+    tax_rate: Optional[float] = Query(None, description="New tax rate to apply. If not provided, uses the existing rate."),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Recalculate taxes for an existing invoice.
+    """
+    supabase = get_supabase()
+    
+    # Check if invoice exists and belongs to the user
+    existing = supabase.table("invoices").select("*").eq("id", str(invoice_id)).eq("user_id", current_user["id"]).execute()
+    
+    if not existing.data or len(existing.data) == 0:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    invoice = existing.data[0]
+    
+    # Get invoice items to recalculate subtotal
+    items_result = supabase.table("invoice_items").select("*").eq("invoice_id", str(invoice_id)).execute()
+    
+    if not items_result.data:
+        raise HTTPException(status_code=400, detail="Invoice has no items")
+    
+    # Recalculate subtotal
+    subtotal = sum(item["quantity"] * item["unit_price"] for item in items_result.data)
+    
+    # Use provided tax rate or existing one
+    rate_to_use = tax_rate if tax_rate is not None else invoice["tax_rate"]
+    
+    # Calculate tax amount and total
+    tax_amount, total_amount = calculate_invoice_taxes(subtotal, rate_to_use)
+    
+    # Update invoice
+    update_data = {
+        "subtotal": subtotal,
+        "tax_rate": rate_to_use,
+        "tax_amount": tax_amount,
+        "total_amount": total_amount
+    }
+    
+    try:
+        result = supabase.table("invoices").update(update_data).eq("id", str(invoice_id)).execute()
+        
+        # Fetch the updated invoice with items
+        updated_invoice = result.data[0]
+        updated_invoice["items"] = items_result.data
+        
+        return updated_invoice
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) 

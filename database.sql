@@ -66,6 +66,40 @@ CREATE TABLE IF NOT EXISTS invoice_items (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS tax_filings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+    tax_type TEXT NOT NULL DEFAULT 'gst',
+    period_type TEXT NOT NULL DEFAULT 'quarterly',
+    total_sales DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+    total_tax_collected DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+    total_tax_paid DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+    net_tax_liability DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+    transaction_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'draft', -- draft, submitted, accepted, rejected
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS tax_submissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    filing_id UUID NOT NULL REFERENCES tax_filings(id) ON DELETE CASCADE,
+    submission_date TIMESTAMPTZ DEFAULT NOW(),
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+    tax_type TEXT NOT NULL DEFAULT 'gst',
+    total_tax_liability DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+    payment_reference TEXT,
+    confirmation_number TEXT,
+    status TEXT NOT NULL DEFAULT 'pending', -- pending, submitted, accepted, rejected
+    notes TEXT,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Create an index on user_id for faster queries
 CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
 
@@ -92,3 +126,18 @@ CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
 
 -- Create an index on invoice_id for invoice_items
 CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice_id ON invoice_items(invoice_id);
+
+-- Create an index on user_id for tax_filings
+CREATE INDEX IF NOT EXISTS idx_tax_filings_user_id ON tax_filings(user_id);
+
+-- Create an index on period_start and period_end for tax_filings
+CREATE INDEX IF NOT EXISTS idx_tax_filings_period ON tax_filings(period_start, period_end);
+
+-- Create an index on status for tax_filings
+CREATE INDEX IF NOT EXISTS idx_tax_filings_status ON tax_filings(status);
+
+-- Create an index on user_id for tax_submissions
+CREATE INDEX IF NOT EXISTS idx_tax_submissions_user_id ON tax_submissions(user_id);
+
+-- Create an index on filing_id for tax_submissions
+CREATE INDEX IF NOT EXISTS idx_tax_submissions_filing_id ON tax_submissions(filing_id);
