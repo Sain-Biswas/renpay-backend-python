@@ -4,7 +4,8 @@ uvicorn[standard]>=0.22.0,<0.23.0
 
 # Database
 supabase>=1.0.3,<2.0.0
-postgrest>=0.10.6,<0.11.0
+postgrest>=0.10.6,<0.11.0  # Ensure compatibility with FastAPI
+pydantic<2.0.0  # Ensure compatibility with FastAPI
 
 # Authentication & Security
 python-jose[cryptography]>=3.3.0,<4.0.0
@@ -19,12 +20,11 @@ python-dotenv>=1.0.0,<2.0.0
 pytz>=2023.3,<2024.0
 
 # Validation & Serialization
-pydantic>=1.10.7,<2.0.0
 email-validator>=2.0.0,<3.0.0
 
 # Testing
 pytest>=7.3.1,<8.0.0
-httpx>=0.24.0,<0.25.0
+httpx>=0.23.0,<0.24.0  # Compatible with both FastAPI & Postgrest
 
 # Development Tools
 black>=23.3.0,<24.0.0
