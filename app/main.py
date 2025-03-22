@@ -6,13 +6,8 @@ from app.routes import (
     auth, transactions, accounts, invoices, tax, 
     inventory, notifications, preferences, reports
 )
-
-# Load environment variables
 load_dotenv()
-
-# Initialize FastAPI app
 app = FastAPI()
-
 # Include routes
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
@@ -28,3 +23,4 @@ app.include_router(reports.router, prefix="/api/report", tags=["reports"])
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the Renpay Backend API"}
+
