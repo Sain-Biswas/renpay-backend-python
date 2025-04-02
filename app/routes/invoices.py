@@ -189,7 +189,6 @@ async def create_invoice(
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
 @router.get("/{invoice_id}", response_model=Invoice)
 async def get_invoice(
     invoice_id: UUID,

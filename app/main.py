@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
-
 # Importing routes
 from app.routes import (
     auth, transactions, accounts, invoices, tax, 
@@ -18,7 +17,6 @@ app.include_router(inventory.router, prefix="/api/inventory", tags=["inventory"]
 app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"])
 app.include_router(preferences.router, prefix="/api/preferences", tags=["preferences"])
 app.include_router(reports.router, prefix="/api/report", tags=["reports"])
-
 # Root endpoint
 @app.get("/")
 def read_root():

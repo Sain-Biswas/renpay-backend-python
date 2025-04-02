@@ -1,3 +1,4 @@
+-- Users Table
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email TEXT UNIQUE NOT NULL,
@@ -6,18 +7,36 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE blacklisted_tokens (
+-- Blacklisted Tokens Table
+CREATE TABLE IF NOT EXISTS blacklisted_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     token TEXT UNIQUE NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL
 );
 
+-- Accounts Table (Linked to Users)
 CREATE TABLE IF NOT EXISTS accounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
     balance DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
+-- Automatically Create Account When a User Registers
+CREATE OR REPLACE FUNCTION create_user_account()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO accounts (user_id, balance) VALUES (NEW.id, 0.00);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER create_account_after_user
+AFTER INSERT ON users
+FOR EACH ROW EXECUTE FUNCTION create_user_account();
+
+-- Inventory Table
 CREATE TABLE IF NOT EXISTS inventory (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
@@ -28,6 +47,7 @@ CREATE TABLE IF NOT EXISTS inventory (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Transactions Table
 CREATE TABLE IF NOT EXISTS transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     amount DECIMAL(15, 2) NOT NULL,
@@ -36,7 +56,10 @@ CREATE TABLE IF NOT EXISTS transactions (
     category TEXT,
     date TIMESTAMPTZ DEFAULT NOW(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+    account_id UUID REFERENCES accounts(id) ON DELETE SET NULL
+);
+
+-- Notifications Table
 CREATE TABLE IF NOT EXISTS notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -46,6 +69,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Invoices Table
 CREATE TABLE IF NOT EXISTS invoices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     invoice_number TEXT NOT NULL,
@@ -61,18 +85,10 @@ CREATE TABLE IF NOT EXISTS invoices (
     status TEXT NOT NULL DEFAULT 'draft', -- draft, sent, paid, cancelled, overdue
     notes TEXT,
     template TEXT DEFAULT 'default',
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-
-CREATE TABLE IF NOT EXISTS user_preferences (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    language TEXT DEFAULT 'en',
-    theme TEXT DEFAULT 'light',
-    alert_preferences JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- Invoice Items Table
 CREATE TABLE IF NOT EXISTS invoice_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
@@ -85,6 +101,18 @@ CREATE TABLE IF NOT EXISTS invoice_items (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- User Preferences Table
+CREATE TABLE IF NOT EXISTS user_preferences (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    language TEXT DEFAULT 'en',
+    theme TEXT DEFAULT 'light',
+    alert_preferences JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Tax Filings Table
 CREATE TABLE IF NOT EXISTS tax_filings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     period_start DATE NOT NULL,
@@ -102,6 +130,7 @@ CREATE TABLE IF NOT EXISTS tax_filings (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Tax Submissions Table
 CREATE TABLE IF NOT EXISTS tax_submissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     filing_id UUID NOT NULL REFERENCES tax_filings(id) ON DELETE CASCADE,
@@ -119,49 +148,7 @@ CREATE TABLE IF NOT EXISTS tax_submissions (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create an index on user_id for faster queries
-CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
-
--- Create an index on transaction_type for faster filtering
-CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(transaction_type);
-
--- Create an index on date for faster date range queries
-CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
-
--- Create an index on account_id for faster queries
-CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);
-
--- Create an index on user_id for accounts table
-CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id);
-
--- Create an index on user_id for invoices table
-CREATE INDEX IF NOT EXISTS idx_invoices_user_id ON invoices(user_id);
-
--- Create an index on invoice_number for faster lookups
-CREATE INDEX IF NOT EXISTS idx_invoices_number ON invoices(invoice_number);
-
--- Create an index on status for filtering
-CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
-
--- Create an index on invoice_id for invoice_items
-CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice_id ON invoice_items(invoice_id);
-
--- Create an index on user_id for tax_filings
-CREATE INDEX IF NOT EXISTS idx_tax_filings_user_id ON tax_filings(user_id);
-
--- Create an index on period_start and period_end for tax_filings
-CREATE INDEX IF NOT EXISTS idx_tax_filings_period ON tax_filings(period_start, period_end);
-
--- Create an index on status for tax_filings
-CREATE INDEX IF NOT EXISTS idx_tax_filings_status ON tax_filings(status);
-
--- Create an index on user_id for tax_submissions
-CREATE INDEX IF NOT EXISTS idx_tax_submissions_user_id ON tax_submissions(user_id);
-
--- Create an index on filing_id for tax_submissions
-CREATE INDEX IF NOT EXISTS idx_tax_submissions_filing_id ON tax_submissions(filing_id);
-
-
+-- Sales Reports Table
 CREATE TABLE IF NOT EXISTS sales_reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -170,5 +157,18 @@ CREATE TABLE IF NOT EXISTS sales_reports (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-
-
+-- Indexes for Optimized Queries
+CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(transaction_type);
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
+CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);
+CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_user_id ON invoices(user_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_number ON invoices(invoice_number);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice_id ON invoice_items(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_tax_filings_user_id ON tax_filings(user_id);
+CREATE INDEX IF NOT EXISTS idx_tax_filings_period ON tax_filings(period_start, period_end);
+CREATE INDEX IF NOT EXISTS idx_tax_filings_status ON tax_filings(status);
+CREATE INDEX IF NOT EXISTS idx_tax_submissions_user_id ON tax_submissions(user_id);
+CREATE INDEX IF NOT EXISTS idx_tax_submissions_filing_id ON tax_submissions(filing_id);
