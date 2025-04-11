@@ -45,7 +45,7 @@ async def register(user: User):
         
         return {
             "message": "User registered successfully, and default account created",
-            "user": user_result.data[0],
+            "user": "Default Account",
             "account": account_result.data[0]
         }
 
@@ -64,12 +64,19 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token_expires = timedelta(minutes=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30)))
     access_token = create_access_token(
-        data={"sub": user.data[0]["email"]}, expires_delta=access_token_expires
+        data={"sub": user.data[0]["email"]},
+        expires_delta=None  # Set to None for no expiration
     )
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "user": {
+            "id": user.data[0]["id"],
+            "email": user.data[0]["email"]
+        }
+    }
 
 @router.post("/logout")
 async def logout(token: str = Depends(oauth2_scheme)):

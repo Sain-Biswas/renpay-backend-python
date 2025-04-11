@@ -60,13 +60,12 @@ Create a `.env` file in the root directory with the following variables:
 SUPABASE_URL=your_supabase_url
 SUPABASE_KEY=your_supabase_key
 SECRET_KEY=your_secret_key_for_jwt
-ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
 
 ### Running the Application
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 The API will be available at `http://localhost:8000`.

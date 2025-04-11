@@ -3,10 +3,22 @@ from app.services.supabase_client import get_supabase
 from app.models.transaction import Transaction, TransactionCreate, TransactionUpdate, TransactionType
 from app.dependencies import get_current_user
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 router = APIRouter()
+
+def json_serializer(obj):
+    """Custom JSON serializer for objects not serializable by default json code"""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, UUID):
+        return str(obj)
+    if isinstance(obj, type):  # Handle class types
+        return obj.__name__
+    if hasattr(obj, '__str__'):  # Handle other objects with string representation
+        return str(obj)
+    raise TypeError(f"Type {type(obj)} not serializable")
 
 async def update_account_balance(supabase, account_id: UUID, amount: float, transaction_type: TransactionType, is_new: bool = True):
     """
@@ -54,7 +66,16 @@ async def get_transactions(
     Retrieve a list of all transactions, optionally filtered by date, type, category, or account.
     """
     supabase = get_supabase()
-    query = supabase.table("transactions").select("*").eq("user_id", current_user["id"])
+    
+    # First get the user's account
+    account_query = supabase.table("accounts").select("id").eq("user_id", str(current_user["id"])).execute()
+    if not account_query.data:
+        return []
+        
+    account_id = account_query.data[0]["id"]
+    
+    # Then get transactions for that account
+    query = supabase.table("transactions").select("*").eq("user_id", str(current_user["id"])).order("date", desc=True)
     
     # Apply filters if provided
     if start_date:
@@ -69,53 +90,45 @@ async def get_transactions(
         query = query.eq("account_id", str(account_id))
     
     result = query.execute()
+    print(f"Transactions query result: {result.data}")  # Debug print
     
-    if result.data is None:
-        return []
-    return result.data
+    return result.data if result.data else []
 
 @router.post("/", response_model=Transaction, status_code=status.HTTP_201_CREATED)
 async def create_transaction(
     transaction: TransactionCreate,
     current_user: dict = Depends(get_current_user)
 ):
-    """
-    Create a new transaction record and update account balance.
-    """
+    """Create a new transaction record and update account balance."""
     supabase = get_supabase()
     
-    # Set the user_id from the authenticated user
-    transaction_data = transaction.dict()
-    transaction_data["user_id"] = current_user["id"]
+    # Convert the transaction data to a dict and ensure all values are JSON serializable
+    transaction_data = {
+        k: (str(v) if isinstance(v, (UUID, type)) else v)
+        for k, v in transaction.dict().items()
+    }
     
-    # If no account_id is provided, use the default account or create one
-    if not transaction_data.get("account_id"):
-        # Check if user has any accounts
-        accounts = supabase.table("accounts").select("*").eq("user_id", current_user["id"]).execute()
-        
-        if not accounts.data or len(accounts.data) == 0:
-            # Create a default account for the user
-            default_account = {
-                "name": "Default Account",
-                "balance": 0.0,
-                "user_id": current_user["id"]
-            }
-            account_result = supabase.table("accounts").insert(default_account).execute()
-            transaction_data["account_id"] = account_result.data[0]["id"]
-        else:
-            # Use the first account
-            transaction_data["account_id"] = accounts.data[0]["id"]
+    # Set user_id
+    transaction_data["user_id"] = str(current_user["id"])
     
+    # Convert account_id to string if it exists
+    if transaction_data.get("account_id"):
+        transaction_data["account_id"] = str(transaction_data["account_id"])
+    
+    # Add current UTC datetime
+    transaction_data["date"] = datetime.now(timezone.utc).isoformat()
+
     try:
-        # Insert the transaction
+        print("Sending transaction data:", transaction_data)  # Debug print
         result = supabase.table("transactions").insert(transaction_data).execute()
+        
         if not result.data or len(result.data) == 0:
             raise HTTPException(status_code=400, detail="Failed to create transaction")
         
         # Update account balance
         await update_account_balance(
             supabase, 
-            UUID(result.data[0]["account_id"]), 
+            UUID(json_serializer(result.data[0]["account_id"])), 
             result.data[0]["amount"], 
             result.data[0]["transaction_type"]
         )
@@ -170,7 +183,7 @@ async def get_transaction(
     Fetch details of a specific transaction.
     """
     supabase = get_supabase()
-    result = supabase.table("transactions").select("*").eq("id", str(transaction_id)).eq("user_id", current_user["id"]).execute()
+    result = supabase.table("transactions").select("*").eq("id", str(transaction_id)).eq("user_id", str(current_user["id"])).execute()
     
     if not result.data or len(result.data) == 0:
         raise HTTPException(status_code=404, detail="Transaction not found")
@@ -261,4 +274,24 @@ async def delete_transaction(
         supabase.table("transactions").delete().eq("id", str(transaction_id)).execute()
         return None
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) 
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/totals/", response_model=dict)
+async def get_transaction_totals(current_user: dict = Depends(get_current_user)):
+    """
+    Get total sales and expenses for the current user.
+    """
+    supabase = get_supabase()
+    
+    # Get sales total
+    sales_query = supabase.table("transactions").select("amount").eq("user_id", str(current_user["id"])).eq("transaction_type", "sale").execute()
+    total_sales = sum(transaction["amount"] for transaction in sales_query.data) if sales_query.data else 0.0
+    
+    # Get expenses total
+    expenses_query = supabase.table("transactions").select("amount").eq("user_id", str(current_user["id"])).eq("transaction_type", "expense").execute()
+    total_expenses = sum(transaction["amount"] for transaction in expenses_query.data) if expenses_query.data else 0.0
+    
+    return {
+        "total_sales": float(total_sales),
+        "total_expenses": float(total_expenses)
+    }

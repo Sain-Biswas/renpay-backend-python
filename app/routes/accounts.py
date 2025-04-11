@@ -91,14 +91,14 @@ async def delete_account(account_id: UUID, current_user: dict = Depends(get_curr
     supabase.table("accounts").delete().eq("id", str(account_id)).execute()
     return None
 
-@router.get("/balance", response_model=dict)
+@router.get("/balance/", response_model=dict)  # Note the trailing slash
 async def get_balance(current_user: dict = Depends(get_current_user)):
     """
     Retrieve the current balance, aggregated from all accounts.
     """
     supabase = get_supabase()
-    accounts = supabase.table("accounts").select("*").eq("user_id", current_user["id"]).execute()
+    accounts = supabase.table("accounts").select("balance").eq("user_id", current_user["id"]).execute()
     
     total_balance = sum(account["balance"] for account in accounts.data) if accounts.data else 0.0
     
-    return {"balance": total_balance}
+    return {"balance": float(total_balance)}  # Ensure we return a float

@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 class AccountBase(BaseModel):
     """Base model for an account."""
-    name: str
+    name: str = Field(default="Default Account")  # Add default value
     balance: float = Field(default=0.0)
 
 class AccountCreate(AccountBase):

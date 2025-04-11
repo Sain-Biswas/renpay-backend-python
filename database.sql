@@ -12,12 +12,13 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS blacklisted_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     token TEXT UNIQUE NOT NULL,
-    expires_at TIMESTAMPTZ NOT NULL
+    -- expires_at TIMESTAMPTZ NOT NULL
 );
 
 -- Accounts Table (Linked to Users)
 CREATE TABLE IF NOT EXISTS accounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL DEFAULT 'Default Account',
     balance DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
     user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
