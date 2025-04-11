@@ -18,23 +18,24 @@ async def register(user: User):
     hashed_password = get_password_hash(user.password)
     
     try:
-        # Insert new user
+        # Insert new user with name
         user_result = supabase.table("users").insert({
             "email": user.email,
-            "hashed_password": hashed_password
+            "hashed_password": hashed_password,
+            "name": user.name  # 👈 Added name field
         }).execute()
 
         if not user_result.data:
             raise HTTPException(status_code=400, detail="Failed to register user")
 
-        user_id = user_result.data[0]["id"]  # Get the new user's ID
+        user_id = user_result.data[0]["id"]
         
         # Create a default account for the user
         account_data = {
-            "id": str(uuid4()),  # Generate a unique ID for the account
+            "id": str(uuid4()),
             "user_id": user_id,
             "name": "Default Account",
-            "balance": 0.0  # You can set an initial balance if required
+            "balance": 0.0
         }
 
         account_result = supabase.table("accounts").insert(account_data).execute()
