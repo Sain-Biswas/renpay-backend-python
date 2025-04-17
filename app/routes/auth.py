@@ -90,20 +90,20 @@ async def logout(token: str = Depends(oauth2_scheme)):
             detail="Invalid token",
         )
     
-    expires_at = datetime.fromtimestamp(payload["exp"])
+    # expires_at = datetime.fromtimestamp(payload["exp"])
     
     # Add the token to the blacklist
-    try:
-        supabase.table("blacklisted_tokens").insert({
-            "token": token,
-            "expires_at": expires_at.isoformat()
-        }).execute()
-        return {"message": "Logged out successfully"}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+    # try:
+    #     supabase.table("blacklisted_tokens").insert({
+    #         "token": token,
+    #         "expires_at": expires_at.isoformat()
+    #     }).execute()
+    #     return {"message": "Logged out successfully"}
+    # except Exception as e:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_400_BAD_REQUEST,
+    #         detail=str(e),
+    #     )
 
 @router.get("/me")
 async def read_users_me(current_user: dict = Depends(get_current_user)):
