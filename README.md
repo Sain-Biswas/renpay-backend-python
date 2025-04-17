@@ -1,6 +1,6 @@
 # Renpay Tech
 
-A comprehensive financial management API built with FastAPI and Supabase, providing authentication, transaction management, account tracking, and invoicing capabilities with GST compliance.
+A comprehensive financial management API built with FastAPI and Supabase, providing persistent authentication, transaction management, account tracking, and invoicing capabilities with GST compliance. Optimized for high performance and reliability.
 
 ## Table of Contents
 
@@ -9,6 +9,10 @@ A comprehensive financial management API built with FastAPI and Supabase, provid
   - [Installation](#installation)
   - [Environment Variables](#environment-variables)
   - [Running the Application](#running-the-application)
+- [Key Features](#key-features)
+  - [Persistent Authentication](#persistent-authentication)
+  - [Performance Optimizations](#performance-optimizations)
+  - [Database Schema Improvements](#database-schema-improvements)
 - [API Documentation](#api-documentation)
   - [Authentication](#authentication)
   - [Transactions](#transactions)
@@ -57,9 +61,47 @@ pip install -r requirements.txt
 Create a `.env` file in the root directory with the following variables:
 
 ```
+# Supabase Configuration
 SUPABASE_URL=your_supabase_url
 SUPABASE_KEY=your_supabase_key
+
+# Security Configuration
 SECRET_KEY=your_secret_key_for_jwt
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=52560000   # 100 years in minutes
+REFRESH_TOKEN_EXPIRE_DAYS=36500        # 100 years in days
+DISABLE_TOKEN_EXPIRY=true              # Disable token expiration checks
+PASSWORD_MIN_LENGTH=8
+FAILED_LOGIN_LIMIT=5
+FAILED_LOGIN_WINDOW=15
+
+# Connection Settings
+CONNECTION_MAX_RETRIES=3
+CONNECTION_RETRY_DELAY=0.5
+CONNECTION_TIMEOUT=5.0
+
+# Application Defaults
+DEFAULT_TAX_RATE=18.0
+DEFAULT_CURRENCY=INR
+DEFAULT_LANGUAGE=en
+DEFAULT_TIMEZONE=Asia/Kolkata
+
+# Performance Settings
+TOKEN_CACHE_TTL=300
+USER_CACHE_TTL=300
+USER_CACHE_MAX_SIZE=1000
+
+# Logging Configuration
+LOG_LEVEL=INFO
+LOG_FORMAT=%(asctime)s - %(name)s - %(levelname)s - %(message)s
+
+# Rate Limiting
+RATE_LIMIT_DEFAULT=1000000
+RATE_LIMIT_WINDOW=60000
+
+# Blacklist Configuration
+BLACKLIST_CACHE_TTL=300
+BLACKLIST_CACHE_MAX_SIZE=1000
 ```
 
 ### Running the Application
@@ -71,6 +113,44 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 The API will be available at `http://localhost:8000`.
 
 You can access the interactive API documentation at `http://localhost:8000/docs` which provides a Swagger UI to test all endpoints directly from your browser.
+
+## Key Features
+
+### Persistent Authentication
+
+Renpay implements a persistent authentication system that never logs users out automatically:
+
+- Token expiration is configured for 100 years by default
+- The `DISABLE_TOKEN_EXPIRY` flag ensures token validation never checks expiration
+- Blacklisted token management ensures security while maintaining persistent sessions
+- The database schema includes enhanced token management tables for tracking sessions
+
+### Performance Optimizations
+
+The application incorporates numerous performance optimizations:
+
+- **Caching**: 
+  - LRU token cache with configurable TTL
+  - User data caching to minimize database lookups
+  - Periodic cache cleanup to prevent memory leaks
+
+- **Model Optimizations**:
+  - Immutable Pydantic models with `frozen=True` for better caching
+  - Optimized JSON serializers for common types
+  - Custom validators to ensure data integrity at model level
+
+- **Database Operations**:
+  - Specialized indexes for common query patterns
+  - Optimized views for financial reporting
+  - Threadpool execution for database operations
+  - Query builder optimization for efficient filters
+
+### Database Schema Improvements
+
+- Enhanced security tables for token management
+- Centralized security configuration table 
+- Optimized indexes for high-volume transaction processing
+- Efficient SQL views for financial snapshots and reporting
 
 ## API Documentation
 
@@ -871,16 +951,17 @@ The API features automatic synchronization between different components:
 - The account balance is updated based on the invoice amount
 - The "mark-as-paid" endpoint provides a convenient way to handle payments
 
-### Tax Calculation and Compliance
-- GST calculations are automatically performed for all invoices
-- When marking an invoice as paid, it can be automatically included in a tax filing
-- Tax submissions create expense transactions to track tax payments
-- Tax reports aggregate data from transactions and invoices for accurate reporting
+### Security and Authentication
+- Token expiry has been configured for extremely long-lived sessions (100 years)
+- Users are never automatically logged out of the application
+- The `DISABLE_TOKEN_EXPIRY` flag ensures tokens remain valid permanently
+- Blacklisted tokens are stored in both database and in-memory cache for fast validation
 
-### Account Management
-- When deleting an account, you can optionally transfer all transactions to another account
-- The balance is also transferred to maintain accurate financial records
-- The system prevents deleting the only account to ensure data integrity
+### Performance and Caching
+- User data is cached with configurable TTL to minimize database lookups
+- Token validation results are cached for faster API responses
+- LRU cache strategy prevents memory leaks with high-volume usage
+- Background processes periodically clean up expired cache entries
 
 ## Tax Calculation & Compliance
 
