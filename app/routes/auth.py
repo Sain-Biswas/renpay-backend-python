@@ -30,23 +30,22 @@ async def register(user: User):
 
         user_id = user_result.data[0]["id"]
         
-        # Create a default account for the user
-        account_data = {
-            "id": str(uuid4()),
-            "user_id": user_id,
-            "name": "Default Account",
-            "balance": 0.0
-        }
+        # # Create a default account for the user
+        # account_data = {
+        #     "id": str(uuid4()),
+        #     "user_id": user_id,
+        #     "name": "Default Account",
+        #     "balance": 0.0
+        # }
 
-        account_result = supabase.table("accounts").insert(account_data).execute()
+        # account_result = supabase.table("accounts").insert(account_data).execute()
 
-        if not account_result.data:
-            raise HTTPException(status_code=400, detail="User registered but failed to create default account")
+        # if not account_result.data:
+        #     raise HTTPException(status_code=400, detail="User registered but failed to create default account")
         
         return {
             "message": "User registered successfully, and default account created",
             "user": "Default Account",
-            "account": account_result.data[0]
         }
 
     except Exception as e:

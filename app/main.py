@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import ORJSONResponse
 
 # Importing routes
 from app.routes import (
@@ -8,7 +9,16 @@ from app.routes import (
     inventory, notifications, preferences, reports
 )
 load_dotenv()
-app = FastAPI()
+app = FastAPI(
+    title="Hisaab",
+    description="A modern API for financial management and tracking",
+    version="v1",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+    default_response_class=ORJSONResponse,  # Faster JSON serialization
+    debug=True
+)
 
 # Add CORS middleware
 app.add_middleware(
