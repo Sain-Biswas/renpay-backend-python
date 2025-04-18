@@ -106,4 +106,14 @@ async def logout(token: str = Depends(oauth2_scheme)):
 
 @router.get("/me")
 async def read_users_me(current_user: dict = Depends(get_current_user)):
-    return current_user
+    supabase = get_supabase()
+
+    account = supabase.table("accounts").select("id", "name").eq("user_id", current_user["id"]).execute()
+
+    if not account.data:
+        raise HTTPException(status_code=400, detail="User has no accounts")
+
+    return {
+        "user": current_user,
+        "account": account.data
+    }
