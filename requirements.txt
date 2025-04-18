@@ -1,64 +1,32 @@
 # Web Framework
 fastapi>=0.110.0,<0.111.0
 uvicorn[standard]>=0.24.0,<0.25.0
-# Starlette version must match FastAPI's requirements
-# FastAPI 0.110.0 depends on starlette>=0.36.3,<0.37.0
-starlette>=0.36.3,<0.37.0
-orjson>=3.9.0,<4.0.0  # Faster JSON serialization
 
 # Database
 supabase>=1.0.3,<2.0.0
 postgrest>=0.10.6,<0.11.0
 pydantic>=2.0.0,<3.0.0
-sqlalchemy>=2.0.0,<3.0.0  # For advanced DB operations
 
 # Authentication & Security
 python-jose[cryptography]>=3.3.0,<4.0.0
 passlib[bcrypt]>=1.7.4,<1.8.0
 bcrypt==4.0.1  # Pin to a specific version that works well with passlib
 python-multipart>=0.0.6,<0.1.0
-pyjwt>=2.8.0  # Faster JWT processing
 
 # Environment & Configuration
 python-dotenv>=1.0.0,<2.0.0
 
 # Date & Time Handling
 pytz>=2023.3,<2024.0
-# Using python-dateutil instead of pendulum which has build issues on Windows
-python-dateutil>=2.8.2  # More powerful datetime library
 
 # Validation & Serialization
 email-validator>=2.0.0,<3.0.0
-pydantic-extra-types>=2.0.0  # Additional Pydantic types 
-pydantic-settings>=2.0.0  # Settings management for Pydantic
-
-# Performance Optimizations
-ujson>=5.8.0  # Ultra-fast JSON processing
-cachetools>=5.3.0  # Caching utilities
-# Optional performance packages - uncomment if needed and platform supports
-# pylibmc>=1.6.3  # Memcached client (Linux/Mac)
-pymemcache>=4.0.0  # Alternative memcached client that's cross-platform
-redis>=5.0.0  # Redis client (if using)
-
-# Concurrency & Async
-asyncio>=3.4.3
-aiohttp>=3.9.0  # Async HTTP client
-httpx>=0.24.1,<0.25.0  # HTTP client
-
-# Monitoring & Logging
-prometheus-client>=0.17.0  # Metrics collection
-structlog>=23.2.0  # Structured logging
-python-json-logger>=2.0.7  # JSON log formatting
 
 # Testing
 pytest>=7.4.0,<8.0.0
-pytest-asyncio>=0.21.0  # Testing async code
-pytest-cov>=4.1.0  # Test coverage
-faker>=19.6.2  # Generate fake data for tests
+httpx>=0.24.1,<0.25.0
 
 # Development Tools
 black>=23.3.0,<24.0.0
 isort>=5.12.0,<6.0.0
 flake8>=6.0.0,<7.0.0
-mypy>=1.5.1  # Type checking
-pre-commit>=3.5.0  # Git hooks
